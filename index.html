@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1a22">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Asistencia">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icono-192.png">
+<link rel="apple-touch-icon" href="icono-192.png">
+<title>Asistencia Sermancontrol</title>
+<style>
+  :root { --bg:#0b1a22; --card:#12252f; --line:#21404f; --fg:#e8f1f4; --muted:#8ea6b2; --verde:#1faa59; --rojo:#e5484d; --acento:#2ec4b6; --amarillo:#f5a524; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.4 -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .app { max-width: 520px; margin: 0 auto; padding: calc(14px + env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 14px; min-height: 100vh; }
+  header { display: flex; align-items: center; gap: 10px; }
+  header img { width: 38px; height: 38px; border-radius: 9px; }
+  header .t { font-weight: 800; font-size: 18px; letter-spacing: .02em; }
+  header .s { color: var(--muted); font-size: 12.5px; }
+  header button { margin-left: auto; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+  .reloj { text-align: center; }
+  .reloj .h { font-size: 46px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+  .reloj .f { color: var(--muted); text-transform: capitalize; }
+  .estado { text-align: center; font-size: 14.5px; margin-top: 6px; }
+  .botones { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .grande { border: 0; border-radius: 16px; padding: 26px 8px; font-size: 21px; font-weight: 800; color: #fff; letter-spacing: .03em; cursor: pointer; }
+  .grande small { display: block; font-size: 12.5px; font-weight: 600; opacity: .85; margin-top: 4px; letter-spacing: 0; }
+  .entrada { background: var(--verde); } .salida { background: var(--rojo); }
+  .grande.sugerido { outline: 4px solid #fff3; }
+  .grande:disabled { opacity: .45; }
+  label { display: block; font-size: 12.5px; color: var(--muted); font-weight: 600; margin: 8px 0 4px; }
+  select, input { width: 100%; font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px; }
+  .fila { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .btn { border: 1px solid var(--line); background: transparent; color: var(--fg); border-radius: 10px; padding: 9px 14px; font: inherit; font-size: 14px; cursor: pointer; }
+  .btn.pri { background: var(--acento); border-color: var(--acento); color: #04201d; font-weight: 800; }
+  .msg { text-align: center; font-weight: 700; min-height: 1.4em; }
+  .ok { color: var(--verde); } .err { color: var(--rojo); } .aviso { color: var(--amarillo); }
+  .lista div { display: flex; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14.5px; }
+  .lista div:last-child { border-bottom: 0; }
+  .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center; }
+  .kpis b { display: block; font-size: 22px; }
+  .kpis span { font-size: 11.5px; color: var(--muted); }
+  .nota { font-size: 12px; color: var(--muted); text-align: center; }
+  .pin { letter-spacing: .6em; text-align: center; font-size: 26px; }
+  .oculto { display: none !important; }
+  h2 { margin: 0 0 8px; font-size: 15px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <img src="icono-192.png" alt="">
+    <div><div class="t">ASISTENCIA</div><div class="s" id="quien">Sermancontrol</div></div>
+    <button class="btn oculto" id="btnSalir">Cambiar</button>
+  </header>
+
+  <!-- Paso 1: quién soy -->
+  <section id="vEntrar" class="card oculto">
+    <h2>¿Quién eres?</h2>
+    <select id="selPersona"><option value="">Elige tu nombre…</option></select>
+    <div id="bloquePin" class="oculto">
+      <label id="lblPin">Tu PIN de 4 números</label>
+      <input id="inPin" class="pin" inputmode="numeric" maxlength="4" autocomplete="off">
+      <label id="lblPin2" class="oculto">Repite el PIN</label>
+      <input id="inPin2" class="pin oculto" inputmode="numeric" maxlength="4" autocomplete="off">
+    </div>
+    <p class="msg" id="msgEntrar"></p>
+    <button class="btn pri" id="btnEntrar" style="width:100%">Entrar</button>
+    <p class="nota">El PIN evita que alguien marque por otra persona. Se pide una sola vez en este celular.</p>
+  </section>
+
+  <!-- Paso 2: marcar -->
+  <section id="vMarcar" class="oculto" style="display:flex;flex-direction:column;gap:14px">
+    <div class="card reloj"><div class="h" id="hora">--:--</div><div class="f" id="fecha"></div><div class="estado" id="estado"></div></div>
+    <div class="botones">
+      <button class="grande entrada" id="btnEntrada">ENTRADA<small>Llegué</small></button>
+      <button class="grande salida" id="btnSalida">SALIDA<small>Me voy</small></button>
+    </div>
+    <p class="msg" id="msgMarcar"></p>
+    <div class="card">
+      <div class="fila">
+        <div><label>Barco / lugar</label><select id="selBarco"><option value="">—</option></select></div>
+        <div><label>OT / OS (opcional)</label><input id="inOt" placeholder="Ej: OS 227"></div>
+      </div>
+      <label>Nota (opcional)</label><input id="inNota" placeholder="Ej: salida a bordo del Grip Nord">
+    </div>
+    <div class="card"><h2>Hoy</h2><div class="lista" id="hoy"><div><span class="nota">Sin marcas hoy</span></div></div></div>
+    <div class="card"><h2 id="tituloMes">Este mes</h2><div class="kpis"><div><b id="kDias">0</b><span>días</span></div><div><b id="kHoras">0</b><span>horas</span></div><div><b id="kExtra">0</b><span>horas extra</span></div></div><p class="nota" id="notaMes" style="margin:8px 0 0"></p></div>
+    <p class="nota" id="pendientes"></p>
+    <p class="nota">📍 Al marcar se guarda tu ubicación solo en ese momento, para registrar dónde marcaste. No se sigue tu ubicación durante el día.</p>
+  </section>
+
+  <section id="vError" class="card oculto"><h2>Falta configurar la app</h2><p class="nota" style="text-align:left">Esta copia todavía no está conectada a la planilla de Sermancontrol. Avísale a Alejandro.</p></section>
+</div>
+
+<script>
+// ======== Configuración (la completa Claude al publicar) ========
+const URL_SERVIDOR = "https://script.google.com/macros/s/AKfycbyMNrqslyoyYR-uDobbCMJ3KUfzHEJsA9nzCKNmz14e5yCXYnXEO0JWnipLoDMb1hky_Q/exec";
+const CLAVE_APP = "SMC-ASIST-2026";
+// ================================================================
+const $ = (s) => document.getElementById(s);
+const LS = { get(k, d) { try { const v = localStorage.getItem("asist:" + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem("asist:" + k, JSON.stringify(v)); } catch (e) {} } };
+let config = LS.get("config", null), yo = LS.get("yo", null), pin = LS.get("pin", null);
+let cola = LS.get("cola", []), historial = LS.get("historial", []);
+const idNuevo = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const tz = "America/Santiago";
+const diaCL = (d) => new Date(d).toLocaleDateString("en-CA", { timeZone: tz });
+const horaCL = (d) => new Date(d).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: tz });
+
+async function llamar(datos) {
+  const r = await fetch(URL_SERVIDOR, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ clave: CLAVE_APP, ...datos }) });
+  return r.json();
+}
+function mostrar(v) { ["vEntrar", "vMarcar", "vError"].forEach((x) => $(x).classList.toggle("oculto", x !== v)); $("btnSalir").classList.toggle("oculto", v !== "vMarcar"); }
+function msg(el, t, cls) { $(el).textContent = t || ""; $(el).className = "msg " + (cls || ""); }
+
+async function cargarConfig() {
+  try { const r = await llamar({ accion: "config" }); if (r.ok) { config = r.config; LS.set("config", config); } } catch (e) { /* sin red: usa la guardada */ }
+}
+function llenarListas() {
+  const sp = $("selPersona"); sp.length = 1;
+  (config ? config.personas : []).forEach((p) => sp.add(new Option(p.nombre, p.nombre)));
+  const sb = $("selBarco"); sb.length = 1;
+  (config ? config.barcos : []).forEach((b) => sb.add(new Option(b, b)));
+  sb.value = LS.get("barco", "");
+}
+
+// ---- Entrar ----
+let modoPin = "entrar";
+$("selPersona").onchange = () => {
+  const p = (config.personas || []).find((x) => x.nombre === $("selPersona").value);
+  $("bloquePin").classList.toggle("oculto", !p); msg("msgEntrar", "");
+  modoPin = p && !p.tienePin ? "crear" : "entrar";
+  $("lblPin").textContent = modoPin === "crear" ? "Crea tu PIN de 4 números" : "Tu PIN de 4 números";
+  $("lblPin2").classList.toggle("oculto", modoPin !== "crear"); $("inPin2").classList.toggle("oculto", modoPin !== "crear");
+};
+$("btnEntrar").onclick = async () => {
+  const persona = $("selPersona").value, p1 = $("inPin").value.trim(), p2 = $("inPin2").value.trim();
+  if (!persona) return msg("msgEntrar", "Elige tu nombre.", "err");
+  if (!/^\d{4}$/.test(p1)) return msg("msgEntrar", "El PIN son 4 números.", "err");
+  if (modoPin === "crear" && p1 !== p2) return msg("msgEntrar", "Los PIN no coinciden.", "err");
+  $("btnEntrar").disabled = true; msg("msgEntrar", "Revisando…");
+  try {
+    let r = modoPin === "crear" ? await llamar({ accion: "crearPin", persona, pin: p1 }) : await llamar({ accion: "entrar", persona, pin: p1 });
+    if (!r.ok) { msg("msgEntrar", r.motivo || "No se pudo entrar.", "err"); $("btnEntrar").disabled = false; return; }
+    yo = persona; pin = p1; LS.set("yo", yo); LS.set("pin", pin); historial = []; LS.set("historial", []);
+    $("inPin").value = ""; $("inPin2").value = ""; $("btnEntrar").disabled = false;
+    iniciarMarcar();
+  } catch (e) { msg("msgEntrar", "Sin conexión. Para entrar la primera vez necesitas internet.", "err"); $("btnEntrar").disabled = false; }
+};
+$("btnSalir").onclick = () => { if (cola.length && !confirm(`Hay ${cola.length} marca(s) sin enviar en este celular. Se enviarán igual cuando vuelva a entrar ${yo}. ¿Cambiar de persona?`)) return; yo = null; pin = null; LS.set("yo", null); LS.set("pin", null); llenarListas(); mostrar("vEntrar"); };
+
+// ---- Marcar ----
+function ubicacion() {
+  return new Promise((res) => {
+    if (!navigator.geolocation) return res({});
+    navigator.geolocation.getCurrentPosition((p) => res({ lat: +p.coords.latitude.toFixed(6), lon: +p.coords.longitude.toFixed(6), precision: Math.round(p.coords.accuracy) }), () => res({}), { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
+  });
+}
+async function marcar(tipo) {
+  $("btnEntrada").disabled = $("btnSalida").disabled = true; msg("msgMarcar", "Guardando…");
+  const barco = $("selBarco").value; LS.set("barco", barco);
+  const geo = await ubicacion();
+  const m = { id: idNuevo(), persona: yo, tipo, ts: new Date().toISOString(), barco, ot: $("inOt").value.trim(), nota: $("inNota").value.trim(), ...geo, dispositivo: navigator.userAgent.slice(0, 80) };
+  cola.push(m); LS.set("cola", cola); historial.push(m); LS.set("historial", historial);
+  $("inNota").value = "";
+  msg("msgMarcar", `✓ ${tipo === "entrada" ? "Entrada" : "Salida"} marcada a las ${horaCL(m.ts)}${geo.lat ? "" : " (sin ubicación)"}`, "ok");
+  if (navigator.vibrate) navigator.vibrate(80);
+  pintar(); await enviarCola();
+  $("btnEntrada").disabled = $("btnSalida").disabled = false;
+}
+$("btnEntrada").onclick = () => marcar("entrada");
+$("btnSalida").onclick = () => marcar("salida");
+
+let enviando = false;
+async function enviarCola() {
+  if (enviando || !cola.length || !yo) return pintar(); enviando = true;
+  try {
+    const mias = cola.filter((m) => m.persona === yo);
+    if (mias.length) {
+      const r = await llamar({ accion: "marcar", persona: yo, pin, marcas: mias });
+      if (r.ok) { const g = new Set(r.guardadas || []); cola = cola.filter((m) => !g.has(m.id)); LS.set("cola", cola); }
+      else if (/PIN/.test(r.motivo || "")) { msg("msgMarcar", "Tu PIN cambió: vuelve a entrar. Tus marcas siguen guardadas en el celular.", "err"); }
+    }
+  } catch (e) { /* sin señal: se reintenta */ }
+  enviando = false; pintar();
+}
+async function traerMisMarcas() {
+  try { const r = await llamar({ accion: "misMarcas", persona: yo, pin }); if (r.ok) { const pend = cola.filter((m) => m.persona === yo); historial = [...r.marcas, ...pend.filter((p) => !r.marcas.some((x) => x.id === p.id))]; LS.set("historial", historial); if (r.horario) { config.horario = r.horario; LS.set("config", config); } pintar(); } } catch (e) {}
+}
+
+function resumenMes() {
+  const h = config && config.horario ? config.horario : {};
+  const colacion = Number(h.colacion_min || 60), diaria = (Number(h.jornada_semanal_h || 42) / 5) * 60;
+  const mes = diaCL(new Date()).slice(0, 7), porDia = {};
+  historial.filter((m) => diaCL(m.ts).startsWith(mes)).sort((a, b) => a.ts.localeCompare(b.ts)).forEach((m) => { (porDia[diaCL(m.ts)] = porDia[diaCL(m.ts)] || []).push(m); });
+  let dias = 0, min = 0, extra = 0, abiertas = 0;
+  Object.values(porDia).forEach((l) => { let ab = null, t = 0; l.forEach((m) => { if (m.tipo === "entrada") ab = m; else if (ab) { t += (new Date(m.ts) - new Date(ab.ts)) / 60000; ab = null; } }); if (ab) abiertas++; const ef = Math.max(0, t - (t > 300 ? colacion : 0)); if (t > 0) dias++; min += ef; if (!ab) extra += Math.max(0, ef - diaria); });
+  return { dias, horas: Math.round(min / 6) / 10, extra: Math.round(extra / 6) / 10, abiertas };
+}
+function pintar() {
+  if (!yo) return;
+  $("quien").textContent = yo;
+  const hoy = historial.filter((m) => m.persona === yo || !m.persona).filter((m) => diaCL(m.ts) === diaCL(new Date())).sort((a, b) => a.ts.localeCompare(b.ts));
+  $("hoy").innerHTML = hoy.length ? "" : '<div><span class="nota">Sin marcas hoy</span></div>';
+  hoy.forEach((m) => { const d = document.createElement("div"); const pend = cola.some((c) => c.id === m.id); d.innerHTML = `<span>${m.tipo === "entrada" ? "🟢 Entrada" : "🔴 Salida"} ${horaCL(m.ts)}</span><span class="nota">${[m.barco, m.ot].filter(Boolean).join(" · ")}${pend ? " ⏳" : " ✓"}</span>`; $("hoy").append(d); });
+  const ult = hoy[hoy.length - 1];
+  const toca = !ult || ult.tipo === "salida" ? "entrada" : "salida";
+  $("btnEntrada").classList.toggle("sugerido", toca === "entrada"); $("btnSalida").classList.toggle("sugerido", toca === "salida");
+  $("estado").innerHTML = ult ? (ult.tipo === "entrada" ? `Estás <b class="ok">trabajando</b> desde las ${horaCL(ult.ts)}` : `Saliste a las ${horaCL(ult.ts)}`) : "Aún no marcas hoy";
+  const r = resumenMes();
+  $("tituloMes").textContent = "Este mes · " + new Date().toLocaleDateString("es-CL", { month: "long", timeZone: tz });
+  $("kDias").textContent = r.dias; $("kHoras").textContent = String(r.horas).replace(".", ","); $("kExtra").textContent = String(r.extra).replace(".", ",");
+  $("notaMes").textContent = r.abiertas ? `⚠ ${r.abiertas} día(s) con entrada sin salida.` : "Cálculo informativo: el oficial lo hace la oficina en el panel.";
+  const n = cola.length; $("pendientes").innerHTML = n ? `<span class="aviso">⏳ ${n} marca(s) esperando señal para enviarse. Se envían solas.</span>` : "Todo enviado ✓";
+}
+function reloj() { const d = new Date(); $("hora").textContent = horaCL(d); $("fecha").textContent = d.toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long", timeZone: tz }); }
+function iniciarMarcar() { mostrar("vMarcar"); llenarListas(); pintar(); enviarCola(); traerMisMarcas(); }
+
+(async function inicio() {
+  if (!/^https:\/\/script\.google\.com\//.test(URL_SERVIDOR)) { mostrar("vError"); return; }
+  reloj(); setInterval(reloj, 1000); setInterval(enviarCola, 30000);
+  window.addEventListener("online", enviarCola);
+  if (config) llenarListas();
+  if (yo && pin) iniciarMarcar(); else mostrar("vEntrar");
+  await cargarConfig(); llenarListas();
+  if (yo) pintar();
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+})();
+</script>
+</body>
+</html>
