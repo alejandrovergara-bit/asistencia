@@ -30,7 +30,9 @@
   .grande small { display: block; font-size: 12.5px; font-weight: 600; opacity: .85; margin-top: 4px; letter-spacing: 0; }
   .entrada { background: var(--verde); } .salida { background: var(--rojo); }
   .grande.sugerido { outline: 4px solid #fff3; }
-  .grande:disabled { opacity: .45; }
+  .grande:disabled { opacity: .35; filter: grayscale(.6); cursor: not-allowed; }
+  .regla { text-align: center; font-size: 13.5px; color: var(--amarillo); font-weight: 700; min-height: 1.2em; margin: -4px 0 0; }
+  select.falta { border-color: var(--amarillo); box-shadow: 0 0 0 2px #f5a52455; }
   label { display: block; font-size: 12.5px; color: var(--muted); font-weight: 600; margin: 8px 0 4px; }
   select, input { width: 100%; font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px; }
   .fila { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -79,10 +81,11 @@
       <button class="grande entrada" id="btnEntrada">ENTRADA<small>Llegué</small></button>
       <button class="grande salida" id="btnSalida">SALIDA<small>Me voy</small></button>
     </div>
+    <p class="regla" id="regla"></p>
     <p class="msg" id="msgMarcar"></p>
     <div class="card">
       <div class="fila">
-        <div><label>Barco / lugar</label><select id="selBarco"><option value="">—</option></select></div>
+        <div><label>Barco / lugar <span style="color:var(--amarillo)">*</span></label><select id="selBarco"><option value="">Elige barco o lugar…</option></select></div>
         <div><label>OT / OS (opcional)</label><input id="inOt" placeholder="Ej: OS 227"></div>
       </div>
       <label>Nota (opcional)</label><input id="inNota" placeholder="Ej: salida a bordo del Grip Nord">
@@ -125,7 +128,7 @@ function llenarListas() {
   (config ? config.personas : []).forEach((p) => sp.add(new Option(p.nombre, p.nombre)));
   const sb = $("selBarco"); sb.length = 1;
   (config ? config.barcos : []).forEach((b) => sb.add(new Option(b, b)));
-  sb.value = LS.get("barco", "");
+  sb.value = ""; // v2: la persona debe elegir el barco o lugar cada vez que marca ENTRADA
 }
 
 // ---- Entrar ----
@@ -160,20 +163,58 @@ function ubicacion() {
     navigator.geolocation.getCurrentPosition((p) => res({ lat: +p.coords.latitude.toFixed(6), lon: +p.coords.longitude.toFixed(6), precision: Math.round(p.coords.accuracy) }), () => res({}), { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
   });
 }
+// v2 (pedido de Alejandro): no se pueden marcar dos ENTRADAS (ni dos SALIDAS) seguidas, y ENTRADA solo
+// se habilita cuando la persona eligió el barco o lugar.
+const HORAS_JORNADA_OLVIDADA = 16; // una entrada sin salida de hace más de 16 h se considera jornada olvidada
+function ultimaMarca() {
+  return historial.filter((m) => m.persona === yo || !m.persona).slice().sort((a, b) => a.ts.localeCompare(b.ts)).pop() || null;
+}
+function estadoMarcado() {
+  const ult = ultimaMarca();
+  const horas = ult ? (Date.now() - new Date(ult.ts)) / 3600000 : 0;
+  const abierta = !!ult && ult.tipo === "entrada";
+  const olvidada = abierta && horas > HORAS_JORNADA_OLVIDADA;
+  return { ult, abierta, olvidada };
+}
+function actualizarBotones() {
+  if (!yo) return;
+  const { ult, abierta, olvidada } = estadoMarcado();
+  const barco = $("selBarco").value;
+  let puedeEntrada = !abierta || olvidada, puedeSalida = abierta && !olvidada, regla = "";
+  if (abierta && !olvidada) regla = `Ya marcaste ENTRADA a las ${horaCL(ult.ts)}${ult.barco ? " en " + ult.barco : ""}. Ahora te toca SALIDA.`;
+  else if (olvidada) regla = `⚠ Quedó una entrada sin salida (${new Date(ult.ts).toLocaleDateString("es-CL", { day: "numeric", month: "short", timeZone: tz })} ${horaCL(ult.ts)}). Avisa a la oficina para corregirla.`;
+  if (puedeEntrada && !barco) { puedeEntrada = false; regla = regla ? regla + " Para marcar ENTRADA elige el barco o lugar." : "Para marcar ENTRADA elige primero el barco o lugar."; }
+  $("btnEntrada").disabled = !puedeEntrada || marcando; $("btnSalida").disabled = !puedeSalida || marcando;
+  $("selBarco").classList.toggle("falta", (!abierta || olvidada) && !barco);
+  $("regla").textContent = regla;
+}
+let marcando = false;
 async function marcar(tipo) {
-  $("btnEntrada").disabled = $("btnSalida").disabled = true; msg("msgMarcar", "Guardando…");
-  const barco = $("selBarco").value; LS.set("barco", barco);
+  if (marcando) return;
+  marcando = true; actualizarBotones(); msg("msgMarcar", "Revisando…");
+  if (navigator.onLine) { await Promise.race([traerMisMarcas(), new Promise((r) => setTimeout(r, 4000))]); }
+  const { ult, abierta, olvidada } = estadoMarcado();
+  const barco = $("selBarco").value;
+  let error = "";
+  if (tipo === "entrada" && abierta && !olvidada) error = `No puedes marcar dos entradas seguidas: ya marcaste ENTRADA a las ${horaCL(ult.ts)}. Marca SALIDA.`;
+  else if (tipo === "salida" && (!abierta || olvidada)) error = "No puedes marcar SALIDA sin una ENTRADA antes.";
+  else if (tipo === "entrada" && !barco) error = "Elige el barco o lugar para marcar tu entrada.";
+  if (error) { marcando = false; msg("msgMarcar", error, "err"); if (navigator.vibrate) navigator.vibrate([60, 60, 60]); actualizarBotones(); return; }
+  msg("msgMarcar", "Guardando…");
+  const barcoFinal = tipo === "salida" && !barco && ult ? (ult.barco || "") : barco;
+  LS.set("barco", barcoFinal);
   const geo = await ubicacion();
-  const m = { id: idNuevo(), persona: yo, tipo, ts: new Date().toISOString(), barco, ot: $("inOt").value.trim(), nota: $("inNota").value.trim(), ...geo, dispositivo: navigator.userAgent.slice(0, 80) };
+  const nota = [olvidada && tipo === "entrada" ? "Jornada anterior quedó sin salida" : "", $("inNota").value.trim()].filter(Boolean).join(" · ");
+  const m = { id: idNuevo(), persona: yo, tipo, ts: new Date().toISOString(), barco: barcoFinal, ot: $("inOt").value.trim(), nota, ...geo, dispositivo: navigator.userAgent.slice(0, 80) };
   cola.push(m); LS.set("cola", cola); historial.push(m); LS.set("historial", historial);
-  $("inNota").value = "";
+  $("inNota").value = ""; if (tipo === "salida") { $("selBarco").value = ""; $("inOt").value = ""; }
   msg("msgMarcar", `✓ ${tipo === "entrada" ? "Entrada" : "Salida"} marcada a las ${horaCL(m.ts)}${geo.lat ? "" : " (sin ubicación)"}`, "ok");
   if (navigator.vibrate) navigator.vibrate(80);
-  pintar(); await enviarCola();
-  $("btnEntrada").disabled = $("btnSalida").disabled = false;
+  marcando = false; pintar(); await enviarCola();
 }
 $("btnEntrada").onclick = () => marcar("entrada");
 $("btnSalida").onclick = () => marcar("salida");
+$("selBarco").onchange = () => { msg("msgMarcar", ""); actualizarBotones(); };
 
 let enviando = false;
 async function enviarCola() {
@@ -208,8 +249,10 @@ function pintar() {
   $("hoy").innerHTML = hoy.length ? "" : '<div><span class="nota">Sin marcas hoy</span></div>';
   hoy.forEach((m) => { const d = document.createElement("div"); const pend = cola.some((c) => c.id === m.id); d.innerHTML = `<span>${m.tipo === "entrada" ? "🟢 Entrada" : "🔴 Salida"} ${horaCL(m.ts)}</span><span class="nota">${[m.barco, m.ot].filter(Boolean).join(" · ")}${pend ? " ⏳" : " ✓"}</span>`; $("hoy").append(d); });
   const ult = hoy[hoy.length - 1];
-  const toca = !ult || ult.tipo === "salida" ? "entrada" : "salida";
+  const est = estadoMarcado();
+  const toca = est.abierta && !est.olvidada ? "salida" : "entrada";
   $("btnEntrada").classList.toggle("sugerido", toca === "entrada"); $("btnSalida").classList.toggle("sugerido", toca === "salida");
+  actualizarBotones();
   $("estado").innerHTML = ult ? (ult.tipo === "entrada" ? `Estás <b class="ok">trabajando</b> desde las ${horaCL(ult.ts)}` : `Saliste a las ${horaCL(ult.ts)}`) : "Aún no marcas hoy";
   const r = resumenMes();
   $("tituloMes").textContent = "Este mes · " + new Date().toLocaleDateString("es-CL", { month: "long", timeZone: tz });
